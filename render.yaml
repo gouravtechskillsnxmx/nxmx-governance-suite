@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: nxmx-policy-server
+    runtime: docker
+    rootDir: policy-server
+    dockerfilePath: Dockerfile
+    envVars:
+      - key: NXMX_ADMIN_KEY
+        generateValue: true
+      - key: NXMX_POLICY_HMAC_SECRET
+        generateValue: true
+      - key: SQLITE_CS
+        value: Data Source=/var/data/nxmx_policy.db
+      - key: NXMX_POLICY_TTL_SECONDS
+        value: "60"
+    disk:
+      name: nxmx-policy-disk
+      mountPath: /var/data
+      sizeGB: 1
