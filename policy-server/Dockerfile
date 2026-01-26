@@ -4,7 +4,7 @@ WORKDIR /src
 
 # copy csproj first for faster restore
 COPY policy-server/Nxmx.PolicyServer.csproj policy-server/
-COPY agent/Nxmx.Agent.csproj agent/
+COPY Agent/Nxmx.Agent.csproj Agent/
 RUN dotnet restore policy-server/Nxmx.PolicyServer.csproj
 
 # copy everything and publish
