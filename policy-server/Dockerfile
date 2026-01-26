@@ -1,21 +1,21 @@
-# Build
+	   
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY ../agent/Nxmx.Agent.csproj ../agent/
-COPY Nxmx.PolicyServer.csproj ./
-RUN dotnet restore ./Nxmx.PolicyServer.csproj
+# copy csproj first for faster restore
+COPY policy-server/Nxmx.PolicyServer.csproj policy-server/
+COPY agent/Nxmx.Agent.csproj agent/
+RUN dotnet restore policy-server/Nxmx.PolicyServer.csproj
 
-COPY .. .
-RUN dotnet publish ./policy-server/Nxmx.PolicyServer.csproj -c Release -o /app/publish
+# copy everything and publish
+COPY . .
+RUN dotnet publish policy-server/Nxmx.PolicyServer.csproj -c Release -o /app/publish
 
-# Run
+	 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=build /app/publish .
 
-# Render sets $PORT. Bind to it.
+# Render injects PORT
 ENV ASPNETCORE_URLS=http://0.0.0.0:${PORT}
-EXPOSE 10000
-
-ENTRYPOINT ["dotnet", "Nxmx.PolicyServer.dll"]
+ENTRYPOINT ["dotnet","Nxmx.PolicyServer.dll"]
