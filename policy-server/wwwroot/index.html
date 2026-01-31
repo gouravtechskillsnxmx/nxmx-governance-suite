@@ -1,1 +1,153 @@
-<!-- Dashboard HTML as shared above -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Nxmx Policy Server</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0b1220;color:#e7ecff;margin:0}
+    .wrap{max-width:980px;margin:0 auto;padding:28px}
+    .card{background:#111a2e;border:1px solid #233055;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    h1{margin:0 0 6px 0;font-size:22px}
+    .muted{opacity:.75}
+    label{display:block;font-size:12px;opacity:.8;margin:10px 0 6px}
+    input,select,button,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #2a3a66;background:#0c152b;color:#e7ecff}
+    textarea{min-height:110px;font-family:ui-monospace,Consolas,monospace}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .btn{cursor:pointer;font-weight:600}
+    .btn.primary{background:#2b6cff;border-color:#2b6cff}
+    .btn.danger{background:#ff3b3b;border-color:#ff3b3b}
+    .pill{display:inline-block;padding:3px 10px;border-radius:999px;background:#1a2747;border:1px solid #2a3a66;font-size:12px}
+    .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid #233055;padding:10px;text-align:left;font-size:13px}
+    th{opacity:.75;font-weight:600}
+    .ok{color:#4cff8f}
+    .bad{color:#ff6b6b}
+    .tiny{font-size:12px;opacity:.75}
+    a{color:#8ab4ff}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Nxmx Policy Server</h1>
+      <div class="muted">Control plane for API kill switch, rate limits, and feature gating.</div>
+      <div class="tiny">Health: <a href="/health" target="_blank">/health</a> • Policy sample: <a href="/api/policies/default" target="_blank">/api/policies/default</a></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label>Admin Key (Header: X-Admin-Key)</label>
+          <input id="adminKey" placeholder="Paste NXMX_ADMIN_KEY from Render env vars" />
+        </div>
+        <div>
+          <label>Tenant ID</label>
+          <input id="tenantId" value="default" />
+        </div>
+      </div>
+
+      <div class="flex" style="margin-top:12px">
+        <button class="btn primary" onclick="loadTenants()">Load Tenants</button>
+        <button class="btn" onclick="loadPolicy()">Load Policy JSON</button>
+        <span id="status" class="pill">idle</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 10px">Tenants</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Tenant</th>
+            <th>KillAll</th>
+            <th>Default Rate/min</th>
+            <th>Audit</th>
+            <th>PII Redaction</th>
+          </tr>
+        </thead>
+        <tbody id="tenantsBody">
+          <tr><td colspan="5" class="muted">Click “Load Tenants”</td></tr>
+        </tbody>
+      </table>
+      <div class="tiny muted" style="margin-top:10px">
+        (Next step: we can add edit controls + endpoint rules CRUD.)
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 10px">Policy (signed envelope)</h3>
+      <textarea id="policyOut" placeholder="Click “Load Policy JSON”"></textarea>
+      <div class="tiny muted" style="margin-top:8px">
+        This is what your injected APIs will fetch and verify using HMAC.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const tenantsBody = document.getElementById('tenantsBody');
+    const policyOut = document.getElementById('policyOut');
+
+    function setStatus(text, ok=true){
+      statusEl.textContent = text;
+      statusEl.className = "pill " + (ok ? "ok" : "bad");
+    }
+
+    async function loadTenants(){
+      const key = document.getElementById('adminKey').value.trim();
+      if(!key){ setStatus("missing admin key", false); return; }
+      setStatus("loading tenants...");
+      try{
+        const res = await fetch('/api/admin/tenants', { headers: { 'X-Admin-Key': key }});
+        if(!res.ok){
+          setStatus("unauthorized or error: " + res.status, false);
+          tenantsBody.innerHTML = `<tr><td colspan="5">Error ${res.status}</td></tr>`;
+          return;
+        }
+        const data = await res.json();
+        if(!Array.isArray(data) || data.length === 0){
+          tenantsBody.innerHTML = `<tr><td colspan="5" class="muted">No tenants found</td></tr>`;
+          setStatus("loaded (empty)");
+          return;
+        }
+        tenantsBody.innerHTML = data.map(t => `
+          <tr>
+            <td><b>${escapeHtml(t.tenantId)}</b></td>
+            <td>${t.killAll ? "✅" : "—"}</td>
+            <td>${t.defaultRateLimitPerMinute ?? 0}</td>
+            <td>${t.enableAudit ? "✅" : "—"}</td>
+            <td>${t.enablePii ? "✅" : "—"}</td>
+          </tr>
+        `).join('');
+        setStatus("loaded tenants ✅");
+      } catch(e){
+        setStatus("error: " + e.message, false);
+      }
+    }
+
+    async function loadPolicy(){
+      const tenantId = document.getElementById('tenantId').value.trim() || 'default';
+      setStatus("loading policy...");
+      try{
+        const res = await fetch(`/api/policies/${encodeURIComponent(tenantId)}`);
+        if(!res.ok){
+          setStatus("error: " + res.status, false);
+          policyOut.value = `Error ${res.status}`;
+          return;
+        }
+        const json = await res.json();
+        policyOut.value = JSON.stringify(json, null, 2);
+        setStatus("loaded policy ✅");
+      } catch(e){
+        setStatus("error: " + e.message, false);
+      }
+    }
+
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+    }
+  </script>
+</body>
+</html>
