@@ -56,4 +56,73 @@ app.MapGet("/api/admin/tenants", (HttpContext ctx) =>
     return Results.Json(list);
 });
 
+// Admin models
+record TenantUpsert(string tenantId, bool killAll, int defaultRateLimitPerMinute, bool enableAudit, bool enablePii);
+record EndpointUpsert(string tenantId, string endpointId, bool disabled, int rateLimitPerMinute, string? requiresFeature);
+record EndpointDelete(string tenantId, string endpointId);
+
+// Create/Update Tenant
+app.MapPost("/api/admin/tenant/upsert", async (HttpContext ctx) =>
+{
+    if (!IsAdmin(ctx)) return Results.Unauthorized();
+
+    var body = await ctx.Request.ReadFromJsonAsync<TenantUpsert>();
+    if (body is null || string.IsNullOrWhiteSpace(body.tenantId))
+        return Results.BadRequest("tenantId required");
+
+    AdminStore.UpsertTenant(
+        db,
+        body.tenantId.Trim(),
+        body.killAll,
+        body.defaultRateLimitPerMinute,
+        body.enableAudit,
+        body.enablePii
+    );
+
+    return Results.Ok(new { ok = true });
+});
+
+// List endpoint rules for a tenant
+app.MapGet("/api/admin/endpoints/{tenantId}", (HttpContext ctx, string tenantId) =>
+{
+    if (!IsAdmin(ctx)) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(tenantId)) return Results.BadRequest("tenantId required");
+    var list = AdminStore.ListEndpointRules(db, tenantId.Trim());
+    return Results.Json(list);
+});
+
+// Create/Update endpoint rule
+app.MapPost("/api/admin/endpoint/upsert", async (HttpContext ctx) =>
+{
+    if (!IsAdmin(ctx)) return Results.Unauthorized();
+
+    var body = await ctx.Request.ReadFromJsonAsync<EndpointUpsert>();
+    if (body is null || string.IsNullOrWhiteSpace(body.tenantId) || string.IsNullOrWhiteSpace(body.endpointId))
+        return Results.BadRequest("tenantId and endpointId required");
+
+    AdminStore.UpsertEndpointRule(
+        db,
+        body.tenantId.Trim(),
+        body.endpointId.Trim(),
+        body.disabled,
+        body.rateLimitPerMinute,
+        body.requiresFeature
+    );
+
+    return Results.Ok(new { ok = true });
+});
+
+// Delete endpoint rule
+app.MapPost("/api/admin/endpoint/delete", async (HttpContext ctx) =>
+{
+    if (!IsAdmin(ctx)) return Results.Unauthorized();
+
+    var body = await ctx.Request.ReadFromJsonAsync<EndpointDelete>();
+    if (body is null || string.IsNullOrWhiteSpace(body.tenantId) || string.IsNullOrWhiteSpace(body.endpointId))
+        return Results.BadRequest("tenantId and endpointId required");
+
+    AdminStore.DeleteEndpointRule(db, body.tenantId.Trim(), body.endpointId.Trim());
+    return Results.Ok(new { ok = true });
+});
+
 app.Run();
