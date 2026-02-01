@@ -8,8 +8,4 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.6" />
   </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
 </Project>
