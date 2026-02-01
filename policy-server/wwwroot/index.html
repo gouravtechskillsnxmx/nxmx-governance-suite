@@ -77,6 +77,64 @@
     </div>
 
     <div class="card">
+  <h3 style="margin:0 0 10px">Admin Controls</h3>
+
+  <div class="row">
+    <div>
+      <label>Tenant ID to edit/create</label>
+      <input id="t_edit" value="default" />
+    </div>
+    <div>
+      <label>Default Rate Limit / min (0 = off)</label>
+      <input id="t_rate" type="number" value="0" />
+    </div>
+  </div>
+
+  <div class="flex" style="margin-top:10px">
+    <label class="pill"><input id="t_kill" type="checkbox" /> KillAll</label>
+    <label class="pill"><input id="t_audit" type="checkbox" checked /> Audit</label>
+    <label class="pill"><input id="t_pii" type="checkbox" checked /> PII Redaction</label>
+    <button class="btn primary" onclick="saveTenant()">Save Tenant</button>
+  </div>
+
+  <hr style="border:0;border-top:1px solid #233055;margin:16px 0" />
+
+  <h4 style="margin:0 0 10px">Endpoint Rules</h4>
+
+  <div class="row">
+    <div>
+      <label>Endpoint ID (example: GET:/api/orders)</label>
+      <input id="e_id" placeholder="GET:/api/orders" />
+    </div>
+    <div>
+      <label>Rate Limit / min (0 = off)</label>
+      <input id="e_rate" type="number" value="0" />
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>Requires Feature (optional)</label>
+      <input id="e_feat" placeholder="PRO" />
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <label class="pill"><input id="e_disabled" type="checkbox" /> Disabled</label>
+    </div>
+  </div>
+
+  <div class="flex" style="margin-top:10px">
+    <button class="btn primary" onclick="saveEndpoint()">Save Endpoint Rule</button>
+    <button class="btn danger" onclick="deleteEndpoint()">Delete Endpoint Rule</button>
+    <button class="btn" onclick="loadEndpoints()">Load Endpoint Rules</button>
+  </div>
+
+  <div style="margin-top:12px">
+    <textarea id="endpointsOut" placeholder="Endpoint rules will appear here..."></textarea>
+  </div>
+</div>
+
+<div class="card">
       <h3 style="margin:0 0 10px">Policy (signed envelope)</h3>
       <textarea id="policyOut" placeholder="Click “Load Policy JSON”"></textarea>
       <div class="tiny muted" style="margin-top:8px">
@@ -148,6 +206,92 @@
     function escapeHtml(s){
       return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
     }
+  async function saveTenant(){
+  const key = document.getElementById('adminKey').value.trim();
+  if(!key){ setStatus("missing admin key", false); return; }
+
+  const tenantId = document.getElementById('t_edit').value.trim();
+  const killAll = document.getElementById('t_kill').checked;
+  const enableAudit = document.getElementById('t_audit').checked;
+  const enablePii = document.getElementById('t_pii').checked;
+  const rate = parseInt(document.getElementById('t_rate').value || "0", 10);
+
+  if(!tenantId){ setStatus("tenantId required", false); return; }
+
+  setStatus("saving tenant...");
+  const res = await fetch('/api/admin/tenant/upsert', {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', 'X-Admin-Key': key },
+    body: JSON.stringify({ tenantId, killAll, defaultRateLimitPerMinute: rate, enableAudit, enablePii })
+  });
+
+  if(!res.ok){ setStatus("save tenant failed: " + res.status, false); return; }
+  setStatus("tenant saved ✅");
+  await loadTenants();
+}
+
+async function loadEndpoints(){
+  const key = document.getElementById('adminKey').value.trim();
+  if(!key){ setStatus("missing admin key", false); return; }
+
+  const tenantId = document.getElementById('t_edit').value.trim() || "default";
+  const out = document.getElementById('endpointsOut');
+
+  setStatus("loading endpoints...");
+  const res = await fetch(`/api/admin/endpoints/${encodeURIComponent(tenantId)}`, {
+    headers: { 'X-Admin-Key': key }
+  });
+
+  if(!res.ok){ setStatus("load endpoints failed: " + res.status, false); out.value = ""; return; }
+  const json = await res.json();
+  out.value = JSON.stringify(json, null, 2);
+  setStatus("endpoints loaded ✅");
+}
+
+async function saveEndpoint(){
+  const key = document.getElementById('adminKey').value.trim();
+  if(!key){ setStatus("missing admin key", false); return; }
+
+  const tenantId = document.getElementById('t_edit').value.trim() || "default";
+  const endpointId = document.getElementById('e_id').value.trim();
+  const disabled = document.getElementById('e_disabled').checked;
+  const rateLimitPerMinute = parseInt(document.getElementById('e_rate').value || "0", 10);
+  const requiresFeature = document.getElementById('e_feat').value.trim() || null;
+
+  if(!endpointId){ setStatus("endpointId required", false); return; }
+
+  setStatus("saving endpoint rule...");
+  const res = await fetch('/api/admin/endpoint/upsert', {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', 'X-Admin-Key': key },
+    body: JSON.stringify({ tenantId, endpointId, disabled, rateLimitPerMinute, requiresFeature })
+  });
+
+  if(!res.ok){ setStatus("save endpoint failed: " + res.status, false); return; }
+  setStatus("endpoint saved ✅");
+  await loadEndpoints();
+}
+
+async function deleteEndpoint(){
+  const key = document.getElementById('adminKey').value.trim();
+  if(!key){ setStatus("missing admin key", false); return; }
+
+  const tenantId = document.getElementById('t_edit').value.trim() || "default";
+  const endpointId = document.getElementById('e_id').value.trim();
+
+  if(!endpointId){ setStatus("endpointId required", false); return; }
+
+  setStatus("deleting endpoint rule...");
+  const res = await fetch('/api/admin/endpoint/delete', {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', 'X-Admin-Key': key },
+    body: JSON.stringify({ tenantId, endpointId })
+  });
+
+  if(!res.ok){ setStatus("delete failed: " + res.status, false); return; }
+  setStatus("endpoint deleted ✅");
+  await loadEndpoints();
+}
   </script>
 </body>
 </html>
