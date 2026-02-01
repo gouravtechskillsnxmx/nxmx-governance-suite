@@ -32,7 +32,7 @@ app.MapGet("/api/policies/{tenantId}", (string tenantId) =>
     return Results.Json(env);
 });
 
-// Minimal admin endpoints (enough to prove entrypoint + API works)
+// List tenants (admin)
 app.MapGet("/api/admin/tenants", (HttpContext ctx) =>
 {
     if (!IsAdmin(ctx)) return Results.Unauthorized();
@@ -55,11 +55,6 @@ app.MapGet("/api/admin/tenants", (HttpContext ctx) =>
     }
     return Results.Json(list);
 });
-
-// Admin models
-record TenantUpsert(string tenantId, bool killAll, int defaultRateLimitPerMinute, bool enableAudit, bool enablePii);
-record EndpointUpsert(string tenantId, string endpointId, bool disabled, int rateLimitPerMinute, string? requiresFeature);
-record EndpointDelete(string tenantId, string endpointId);
 
 // Create/Update Tenant
 app.MapPost("/api/admin/tenant/upsert", async (HttpContext ctx) =>
@@ -126,3 +121,11 @@ app.MapPost("/api/admin/endpoint/delete", async (HttpContext ctx) =>
 });
 
 app.Run();
+
+//
+// IMPORTANT: In a top-level Program.cs, any namespace/type declarations must come AFTER top-level statements.
+// Keep these records at the bottom to avoid CS8803.
+//
+public sealed record TenantUpsert(string tenantId, bool killAll, int defaultRateLimitPerMinute, bool enableAudit, bool enablePii);
+public sealed record EndpointUpsert(string tenantId, string endpointId, bool disabled, int rateLimitPerMinute, string? requiresFeature);
+public sealed record EndpointDelete(string tenantId, string endpointId);
